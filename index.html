@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificação de Responsáveis</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Verificador de Responsáveis por Cliente e Atividade</h1>
+        
+        <div class="upload-section">
+            <label for="file1">Carteira de Clientes:</label>
+            <input type="file" id="file1" accept=".csv" required>
+        </div>
+        
+        <div class="upload-section">
+            <label for="file2">Atividades:</label>
+            <input type="file" id="file2" accept=".csv" required>
+        </div>
+        
+        <button onclick="prepareColumns()">Analisar</button>
+        
+        <div id="column-selection" style="display: none;">
+            <h3>Selecione as Colunas</h3>
+            <div id="file1-columns">
+                <p>Carteira de Clientes:</p>
+                <label>ID:
+                    <select id="file1-id-column"></select>
+                </label>
+                <label>Responsável:
+                    <select id="file1-responsavel-column"></select>
+                </label>
+            </div>
+            <div id="file2-columns">
+                <p>Atividades:</p>
+                <label>ID:
+                    <select id="file2-id-column"></select>
+                </label>
+                <label>Responsável Atividade:
+                    <select id="file2-responsavel-column"></select>
+                </label>
+            </div>
+            <button onclick="compareResponsibles()">Confirmar Seleção e Analisar</button>
+        </div>
+        
+        <a id="download-link" style="display: none;">Baixar Resultado</a>
+    </div>
+
+    <script>
+        function csvToArray(str, delimiter = ",") {
+            const headers = str.slice(0, str.indexOf("\n")).split(delimiter);
+            const rows = str.slice(str.indexOf("\n") + 1).split("\n");
+
+            return {
+                headers: headers.map(header => header.trim()),
+                data: rows.map(row => {
+                    const values = row.split(delimiter);
+                    return headers.reduce((object, header, index) => {
+                        object[header.trim()] = values[index]?.trim();
+                        return object;
+                    }, {});
+                })
+            };
+        }
+
+        async function prepareColumns() {
+            const file1 = document.getElementById('file1').files[0];
+            const file2 = document.getElementById('file2').files[0];
+
+            if (!file1 || !file2) {
+                alert("Por favor, selecione os dois arquivos.");
+                return;
+            }
+
+            const file1Text = await file1.text();
+            const file2Text = await file2.text();
+
+            const file1Array = csvToArray(file1Text);
+            const file2Array = csvToArray(file2Text);
+
+            populateColumnSelectors(file1Array.headers, 'file1-id-column', 'file1-responsavel-column');
+            populateColumnSelectors(file2Array.headers, 'file2-id-column', 'file2-responsavel-column');
+
+            document.getElementById('column-selection').style.display = 'block';
+        }
+
+        function populateColumnSelectors(headers, idSelectId, responsavelSelectId) {
+            const idSelect = document.getElementById(idSelectId);
+            const responsavelSelect = document.getElementById(responsavelSelectId);
+            idSelect.innerHTML = '';
+            responsavelSelect.innerHTML = '';
+
+            headers.forEach(header => {
+                const option = new Option(header, header);
+                idSelect.add(option.cloneNode(true));
+                responsavelSelect.add(option);
+            });
+        }
+
+        async function compareResponsibles() {
+            const file1 = document.getElementById('file1').files[0];
+            const file2 = document.getElementById('file2').files[0];
+            const file1Text = await file1.text();
+            const file2Text = await file2.text();
+
+            const file1Array = csvToArray(file1Text);
+            const file2Array = csvToArray(file2Text);
+
+            const file1IdColumn = document.getElementById('file1-id-column').value;
+            const file1ResponsavelColumn = document.getElementById('file1-responsavel-column').value;
+            const file2IdColumn = document.getElementById('file2-id-column').value;
+            const file2ResponsavelColumn = document.getElementById('file2-responsavel-column').value;
+
+            // Criar um mapa de atividades para rápida verificação
+            const atividadesMap = new Map();
+            file2Array.data.forEach(atividade => {
+                atividadesMap.set(atividade[file2IdColumn], atividade[file2ResponsavelColumn]);
+            });
+
+            // Filtrar clientes com responsável diferente entre cliente e atividade
+            const inconsistencias = file1Array.data.filter(cliente => {
+                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
+                return responsavelAtividade && responsavelAtividade !== cliente[file1ResponsavelColumn];
+            });
+
+            // Gerar CSV de resultado com colunas: ID, responsável cliente, responsável atividade
+            let csvContent = "ID,Responsável Cliente,Responsável Atividade\n";
+            inconsistencias.forEach(cliente => {
+                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
+                csvContent += `${cliente[file1IdColumn]},${cliente[file1ResponsavelColumn]},${responsavelAtividade}\n`;
+            });
+
+            // Criar link para download
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const downloadLink = document.getElementById('download-link');
+            downloadLink.href = url;
+            downloadLink.download = "inconsistencias_responsaveis.csv";
+            downloadLink.style.display = "block";
+            downloadLink.textContent = "Baixar Resultado";
+
+            document.getElementById('column-selection').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
