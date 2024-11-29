@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificação de Responsáveis</title>
+    <title>Verificação de Clientes sem Atividade</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Verificador de Responsáveis por Cliente e Atividade</h1>
+        <h1>Verificador de Clientes sem Atividade</h1>
         
         <div class="upload-section">
             <label for="file1">Carteira de Clientes:</label>
@@ -16,7 +16,7 @@
         </div>
         
         <div class="upload-section">
-            <label for="file2">Atividades:</label>
+            <label for="file2">Lista de Atividades:</label>
             <input type="file" id="file2" accept=".csv" required>
         </div>
         
@@ -32,23 +32,26 @@
                 <label>Responsável:
                     <select id="file1-responsavel-column"></select>
                 </label>
+                <label>Fase Atual:
+                    <select id="file1-fase-column"></select>
+                </label>
             </div>
             <div id="file2-columns">
-                <p>Atividades:</p>
+                <p>Lista de Atividades:</p>
                 <label>ID:
                     <select id="file2-id-column"></select>
                 </label>
-                <label>Responsável Atividade:
-                    <select id="file2-responsavel-column"></select>
-                </label>
             </div>
-            <button onclick="compareResponsibles()">Confirmar Seleção e Analisar</button>
+            <button onclick="findClientsWithoutActivity()">Confirmar Seleção e Analisar</button>
         </div>
         
         <a id="download-link" style="display: none;">Baixar Resultado</a>
     </div>
 
     <script>
+        // Lista de fases que devem ser ignoradas
+        const IGNORED_PHASES = ["Suspensos", "Tratativa de Cancelamento"];
+
         function csvToArray(str, delimiter = ",") {
             const headers = str.slice(0, str.indexOf("\n")).split(delimiter);
             const rows = str.slice(str.indexOf("\n") + 1).split("\n");
@@ -80,26 +83,37 @@
             const file1Array = csvToArray(file1Text);
             const file2Array = csvToArray(file2Text);
 
-            populateColumnSelectors(file1Array.headers, 'file1-id-column', 'file1-responsavel-column');
-            populateColumnSelectors(file2Array.headers, 'file2-id-column', 'file2-responsavel-column');
+            populateColumnSelectors(file1Array.headers, 'file1-id-column', 'file1-responsavel-column', 'file1-fase-column');
+            populateColumnSelectors(file2Array.headers, 'file2-id-column');
 
             document.getElementById('column-selection').style.display = 'block';
         }
 
-        function populateColumnSelectors(headers, idSelectId, responsavelSelectId) {
+        function populateColumnSelectors(headers, idSelectId, responsavelSelectId = null, faseSelectId = null) {
             const idSelect = document.getElementById(idSelectId);
-            const responsavelSelect = document.getElementById(responsavelSelectId);
             idSelect.innerHTML = '';
-            responsavelSelect.innerHTML = '';
-
             headers.forEach(header => {
-                const option = new Option(header, header);
-                idSelect.add(option.cloneNode(true));
-                responsavelSelect.add(option);
+                idSelect.add(new Option(header, header));
             });
+
+            if (responsavelSelectId) {
+                const responsavelSelect = document.getElementById(responsavelSelectId);
+                responsavelSelect.innerHTML = '';
+                headers.forEach(header => {
+                    responsavelSelect.add(new Option(header, header));
+                });
+            }
+
+            if (faseSelectId) {
+                const faseSelect = document.getElementById(faseSelectId);
+                faseSelect.innerHTML = '';
+                headers.forEach(header => {
+                    faseSelect.add(new Option(header, header));
+                });
+            }
         }
 
-        async function compareResponsibles() {
+        async function findClientsWithoutActivity() {
             const file1 = document.getElementById('file1').files[0];
             const file2 = document.getElementById('file2').files[0];
             const file1Text = await file1.text();
@@ -110,26 +124,27 @@
 
             const file1IdColumn = document.getElementById('file1-id-column').value;
             const file1ResponsavelColumn = document.getElementById('file1-responsavel-column').value;
+            const file1FaseColumn = document.getElementById('file1-fase-column').value;
             const file2IdColumn = document.getElementById('file2-id-column').value;
-            const file2ResponsavelColumn = document.getElementById('file2-responsavel-column').value;
 
-            // Criar um mapa de atividades para rápida verificação
-            const atividadesMap = new Map();
-            file2Array.data.forEach(atividade => {
-                atividadesMap.set(atividade[file2IdColumn], atividade[file2ResponsavelColumn]);
-            });
+            if (!file1IdColumn || !file1ResponsavelColumn || !file1FaseColumn || !file2IdColumn) {
+                alert("Por favor, selecione todas as colunas necessárias.");
+                return;
+            }
 
-            // Filtrar clientes com responsável diferente entre cliente e atividade
-            const inconsistencias = file1Array.data.filter(cliente => {
-                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
-                return responsavelAtividade && responsavelAtividade !== cliente[file1ResponsavelColumn];
-            });
+            // Criar um conjunto de IDs que têm atividades
+            const atividadesSet = new Set(file2Array.data.map(atividade => atividade[file2IdColumn]));
 
-            // Gerar CSV de resultado com colunas: ID, responsável cliente, responsável atividade
-            let csvContent = "ID,Responsável Cliente,Responsável Atividade\n";
-            inconsistencias.forEach(cliente => {
-                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
-                csvContent += `${cliente[file1IdColumn]},${cliente[file1ResponsavelColumn]},${responsavelAtividade}\n`;
+            // Filtrar clientes sem atividades, excluindo os que estão em fases ignoradas
+            const clientesSemAtividade = file1Array.data.filter(cliente => 
+                !atividadesSet.has(cliente[file1IdColumn]) &&
+                !IGNORED_PHASES.includes(cliente[file1FaseColumn])
+            );
+
+            // Gerar CSV de resultado com colunas: ID, Responsável
+            let csvContent = "ID,Responsável\n";
+            clientesSemAtividade.forEach(cliente => {
+                csvContent += `${cliente[file1IdColumn]},${cliente[file1ResponsavelColumn]}\n`;
             });
 
             // Criar link para download
@@ -137,7 +152,7 @@
             const url = URL.createObjectURL(blob);
             const downloadLink = document.getElementById('download-link');
             downloadLink.href = url;
-            downloadLink.download = "inconsistencias_responsaveis.csv";
+            downloadLink.download = "clientes_sem_atividade.csv";
             downloadLink.style.display = "block";
             downloadLink.textContent = "Baixar Resultado";
 
