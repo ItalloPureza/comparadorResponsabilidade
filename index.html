@@ -1,147 +1,153 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificação de Responsáveis</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Comparador de Planilhas</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Verificador de Responsáveis por Cliente e Atividade</h1>
-        
-        <div class="upload-section">
-            <label for="file1">Carteira de Clientes:</label>
-            <input type="file" id="file1" accept=".csv" required>
-        </div>
-        
-        <div class="upload-section">
-            <label for="file2">Atividades:</label>
-            <input type="file" id="file2" accept=".csv" required>
-        </div>
-        
-        <button onclick="prepareColumns()">Analisar</button>
-        
-        <div id="column-selection" style="display: none;">
-            <h3>Selecione as Colunas</h3>
-            <div id="file1-columns">
-                <p>Carteira de Clientes:</p>
-                <label>ID:
-                    <select id="file1-id-column"></select>
-                </label>
-                <label>Responsável:
-                    <select id="file1-responsavel-column"></select>
-                </label>
-            </div>
-            <div id="file2-columns">
-                <p>Atividades:</p>
-                <label>ID:
-                    <select id="file2-id-column"></select>
-                </label>
-                <label>Responsável Atividade:
-                    <select id="file2-responsavel-column"></select>
-                </label>
-            </div>
-            <button onclick="compareResponsibles()">Confirmar Seleção e Analisar</button>
-        </div>
-        
-        <a id="download-link" style="display: none;">Baixar Resultado</a>
+    <h1>Comparador de Planilhas</h1>
+
+    <div>
+        <h3>Upload das Planilhas</h3>
+        <label>Planilha de Carteira:</label>
+        <input type="file" id="carteiraUpload" accept=".csv"><br><br>
+
+        <label>Planilha de Atividades:</label>
+        <input type="file" id="atividadesUpload" accept=".csv"><br><br>
+    </div>
+
+    <div id="columnSelection" style="display:none;">
+        <h3>Selecione as colunas</h3>
+        <h4>Planilha de Carteira</h4>
+        <label>Coluna de ID:</label>
+        <select id="carteiraIdColumn"></select>
+        <label>Coluna de Responsável:</label>
+        <select id="carteiraRespColumn"></select>
+
+        <h4>Planilha de Atividades</h4>
+        <label>Coluna de ID:</label>
+        <select id="atividadesIdColumn"></select>
+        <label>Coluna de Responsável:</label>
+        <select id="atividadesRespColumn"></select><br><br>
+
+        <button id="analyzeButton">Analisar</button>
+    </div>
+
+    <div id="resultSection" style="display:none;">
+        <h3>Resultados</h3>
+        <button id="downloadButton">Baixar Resultado</button>
     </div>
 
     <script>
-        function csvToArray(str, delimiter = ",") {
-            const headers = str.slice(0, str.indexOf("\n")).split(delimiter);
-            const rows = str.slice(str.indexOf("\n") + 1).split("\n");
+        document.getElementById("carteiraUpload").addEventListener("change", handleFileUpload);
+        document.getElementById("atividadesUpload").addEventListener("change", handleFileUpload);
+        document.getElementById("analyzeButton").addEventListener("click", analyzeData);
 
-            return {
-                headers: headers.map(header => header.trim()),
-                data: rows.map(row => {
-                    const values = row.split(delimiter);
-                    return headers.reduce((object, header, index) => {
-                        object[header.trim()] = values[index]?.trim();
-                        return object;
-                    }, {});
-                })
+        let carteiraData = [];
+        let atividadesData = [];
+        let selectedColumns = {};
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const csvData = e.target.result;
+                const rows = csvData.split("\n").map(row => row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)); // Regex para ignorar vírgulas entre aspas
+                const headers = rows[0].map(header => header.trim());
+
+                if (event.target.id === "carteiraUpload") {
+                    carteiraData = rows;
+                    populateColumnSelection("carteira", headers);
+                } else if (event.target.id === "atividadesUpload") {
+                    atividadesData = rows;
+                    populateColumnSelection("atividades", headers);
+                }
+
+                if (carteiraData.length && atividadesData.length) {
+                    document.getElementById("columnSelection").style.display = "block";
+                }
             };
+
+            reader.readAsText(file);
         }
 
-        async function prepareColumns() {
-            const file1 = document.getElementById('file1').files[0];
-            const file2 = document.getElementById('file2').files[0];
+        function populateColumnSelection(planilha, headers) {
+            const idSelect = document.getElementById(`${planilha}IdColumn`);
+            const respSelect = document.getElementById(`${planilha}RespColumn`);
 
-            if (!file1 || !file2) {
-                alert("Por favor, selecione os dois arquivos.");
-                return;
+            idSelect.innerHTML = "";
+            respSelect.innerHTML = "";
+
+            headers.forEach((header, index) => {
+                const option = document.createElement("option");
+                option.value = index;
+                option.textContent = header;
+                idSelect.appendChild(option);
+
+                const respOption = option.cloneNode(true);
+                respSelect.appendChild(respOption);
+            });
+        }
+
+        function analyzeData() {
+            const carteiraIdIndex = parseInt(document.getElementById("carteiraIdColumn").value);
+            const carteiraRespIndex = parseInt(document.getElementById("carteiraRespColumn").value);
+            const atividadesIdIndex = parseInt(document.getElementById("atividadesIdColumn").value);
+            const atividadesRespIndex = parseInt(document.getElementById("atividadesRespColumn").value);
+
+            const carteiraMap = new Map();
+            for (let i = 1; i < carteiraData.length; i++) {
+                const row = carteiraData[i];
+                const id = row[carteiraIdIndex]?.trim();
+                const responsavel = row[carteiraRespIndex]?.trim();
+                if (id) carteiraMap.set(id, responsavel);
             }
 
-            const file1Text = await file1.text();
-            const file2Text = await file2.text();
+            const results = [];
+            const foundIds = new Set();
 
-            const file1Array = csvToArray(file1Text);
-            const file2Array = csvToArray(file2Text);
+            for (let i = 1; i < atividadesData.length; i++) {
+                const row = atividadesData[i];
+                const id = row[atividadesIdIndex]?.trim();
+                const responsavelAtividade = row[atividadesRespIndex]?.trim();
 
-            populateColumnSelectors(file1Array.headers, 'file1-id-column', 'file1-responsavel-column');
-            populateColumnSelectors(file2Array.headers, 'file2-id-column', 'file2-responsavel-column');
+                if (id && carteiraMap.has(id)) {
+                    foundIds.add(id);
+                    const responsavelCarteira = carteiraMap.get(id);
+                    if (responsavelCarteira === responsavelAtividade) {
+                        results.push([id, "Correto", "O cliente está com a atividade correta", ""]);
+                    } else {
+                        results.push([id, "Incorreto", `O analista correto é ${responsavelCarteira}`, responsavelAtividade]);
+                    }
+                } else if (id) {
+                    results.push([id, "Cancelado", "O cliente não está na carteira", responsavelAtividade]);
+                }
+            }
 
-            document.getElementById('column-selection').style.display = 'block';
+            for (const [id, responsavel] of carteiraMap) {
+                if (!foundIds.has(id)) {
+                    results.push([id, "Sem atividade", "O cliente está sem atividade", ""]);
+                }
+            }
+
+            generateCSV(results);
         }
 
-        function populateColumnSelectors(headers, idSelectId, responsavelSelectId) {
-            const idSelect = document.getElementById(idSelectId);
-            const responsavelSelect = document.getElementById(responsavelSelectId);
-            idSelect.innerHTML = '';
-            responsavelSelect.innerHTML = '';
+        function generateCSV(data) {
+            const csvContent = "ID Cliente,Status Atividades,Observação,Analista Incorreto\n" +
+                data.map(row => row.map(item => `"${item}"`).join(",")).join("\n");
 
-            headers.forEach(header => {
-                const option = new Option(header, header);
-                idSelect.add(option.cloneNode(true));
-                responsavelSelect.add(option);
-            });
-        }
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "resultado.csv";
+            link.style.display = "none";
 
-        async function compareResponsibles() {
-            const file1 = document.getElementById('file1').files[0];
-            const file2 = document.getElementById('file2').files[0];
-            const file1Text = await file1.text();
-            const file2Text = await file2.text();
-
-            const file1Array = csvToArray(file1Text);
-            const file2Array = csvToArray(file2Text);
-
-            const file1IdColumn = document.getElementById('file1-id-column').value;
-            const file1ResponsavelColumn = document.getElementById('file1-responsavel-column').value;
-            const file2IdColumn = document.getElementById('file2-id-column').value;
-            const file2ResponsavelColumn = document.getElementById('file2-responsavel-column').value;
-
-            // Criar um mapa de atividades para rápida verificação
-            const atividadesMap = new Map();
-            file2Array.data.forEach(atividade => {
-                atividadesMap.set(atividade[file2IdColumn], atividade[file2ResponsavelColumn]);
-            });
-
-            // Filtrar clientes com responsável diferente entre cliente e atividade
-            const inconsistencias = file1Array.data.filter(cliente => {
-                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
-                return responsavelAtividade && responsavelAtividade !== cliente[file1ResponsavelColumn];
-            });
-
-            // Gerar CSV de resultado com colunas: ID, responsável cliente, responsável atividade
-            let csvContent = "ID,Responsável Cliente,Responsável Atividade\n";
-            inconsistencias.forEach(cliente => {
-                const responsavelAtividade = atividadesMap.get(cliente[file1IdColumn]);
-                csvContent += `${cliente[file1IdColumn]},${cliente[file1ResponsavelColumn]},${responsavelAtividade}\n`;
-            });
-
-            // Criar link para download
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const downloadLink = document.getElementById('download-link');
-            downloadLink.href = url;
-            downloadLink.download = "inconsistencias_responsaveis.csv";
-            downloadLink.style.display = "block";
-            downloadLink.textContent = "Baixar Resultado";
-
-            document.getElementById('column-selection').style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
