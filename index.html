@@ -127,8 +127,11 @@
             }
 
             for (const [id, responsavel] of carteiraMap) {
+
+                const responsavelCarteira = carteiraMap.get(id);
+
                 if (!foundIds.has(id)) {
-                    results.push([id, "Sem atividade", "O cliente está do analista sem atividade", ""]);
+                    results.push([id, "Sem atividade", "O cliente está sem atividade", responsavelCarteira]);
                 }
             }
 
@@ -136,7 +139,7 @@
         }
 
         function generateCSV(data) {
-            const csvContent = "ID Cliente,Status Atividades,Observação,Analista Incorreto\n" +
+            const csvContent = "ID Cliente,Status Atividades,Observação,Analista Atual\n" +
                 data.map(row => row.map(item => `"${item}"`).join(",")).join("\n");
 
             const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
